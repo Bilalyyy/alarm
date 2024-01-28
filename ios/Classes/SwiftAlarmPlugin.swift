@@ -70,55 +70,39 @@ public class SwiftAlarmPlugin: NSObject, FlutterPlugin {
     private func setAlarm(call: FlutterMethodCall, result: FlutterResult) {
         self.mixOtherAudios()
 
-        guard let args = call.arguments as? [String: Any] else {
+        guard let args = call.arguments as? [String: Any], args = Args(data: args) else {
             result(FlutterError(code: "NATIVE_ERR", message: "[Alarm] Arguments are not in the expected format", details: nil))
             return
         }
 
-        let id = args["id"] as! Int
-        let delayInSeconds = args["delayInSeconds"] as! Double
-        let notificationTitle = args["notificationTitle"] as? String
-        let notificationBody = args["notificationBody"] as? String
-
-        if let notificationTitle && let notificationBody && delayInSeconds >= 1.0 {
-            NotificationManager.shared.scheduleNotification(id: String(id),
-                                                            delayInSeconds: Int(floor(delayInSeconds)),
+        if let notificationTitle = args.notificationTitle && let notificationBody = args.notificationBody && args.delayInSeconds >= 1.0 {
+            NotificationManager.shared.scheduleNotification(id: args.id,
+                                                            delayInSeconds: args.delayInSeconds,
                                                             title: notificationTitle,
                                                             body: notificationBody)
         }
 
-        notifOnKillEnabled = (args["notifOnKillEnabled"] as! Bool)
-        notificationTitleOnKill = (args["notifTitleOnAppKill"] as! String)
-        notificationBodyOnKill = (args["notifDescriptionOnAppKill"] as! String)
+        notifOnKillEnabled = args.notifOnKillEnabled
+        notificationTitleOnKill = args.notificationTitleOnKill
+        notificationBodyOnKill = args.notificationBodyOnKill
 
         if notifOnKillEnabled && !observerAdded {
             observerAdded = true
             NotificationManager.shared.registerForAppTerminationNotification(observer: self, selector: #selector(applicationWillTerminate(_:)))
         }
 
-        let loopAudio = args["loopAudio"] as! Bool
-        let fadeDuration = args["fadeDuration"] as! Double
-        let vibrationsEnabled = args["vibrate"] as! Bool
-        let volume = args["volume"] as? Double
-        let assetAudio = args["assetAudio"] as! String
-
-        var volumeFloat: Float? = nil
-        if let volumeValue = volume {
-            volumeFloat = Float(volumeValue)
-        }
-
-        if assetAudio.hasPrefix("assets/") {
-            let filename = registrar.lookupKey(forAsset: assetAudio)
+        if args.assetAudio.hasPrefix("assets/") {
+            let filename = registrar.lookupKey(forAsset: args.assetAudio)
 
             guard let audioPath = Bundle.main.path(forResource: filename, ofType: nil) else {
-                result(FlutterError(code: "NATIVE_ERR", message: "[Alarm] Audio file not found: \(assetAudio)", details: nil))
+                result(FlutterError(code: "NATIVE_ERR", message: "[Alarm] Audio file not found: \(args.assetAudio)", details: nil))
                 return
             }
 
             do {
                 let audioUrl = URL(fileURLWithPath: audioPath)
                 let audioPlayer = try AVAudioPlayer(contentsOf: audioUrl)
-                self.audioPlayers[id] = audioPlayer
+                self.audioPlayers[args.id] = audioPlayer
             } catch {
                 result(FlutterError(code: "NATIVE_ERR", message: "[Alarm] Error loading audio player: \(error.localizedDescription)", details: nil))
                 return
@@ -126,35 +110,35 @@ public class SwiftAlarmPlugin: NSObject, FlutterPlugin {
         } else {
             do {
                 let documentsDirectory = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-                let filename = String(assetAudio.split(separator: "/").last ?? "")
+                let filename = String(args.assetAudio.split(separator: "/").last ?? "")
                 let assetAudioURL = documentsDirectory.appendingPathComponent(filename)
 
                 let audioPlayer = try AVAudioPlayer(contentsOf: assetAudioURL)
-                self.audioPlayers[id] = audioPlayer
+                self.audioPlayers[args.id] = audioPlayer
             } catch {
-                result(FlutterError.init(code: "NATIVE_ERR", message: "[Alarm] Error loading given local asset path: \(assetAudio)", details: nil))
+                result(FlutterError.init(code: "NATIVE_ERR", message: "[Alarm] Error loading given local asset path: \(args.assetAudio)", details: nil))
                 return
             }
         }
 
-        guard let audioPlayer = self.audioPlayers[id] else {
-            result(FlutterError(code: "NATIVE_ERR", message: "[Alarm] Audio player not found for ID: \(id)", details: nil))
+        guard let audioPlayer = self.audioPlayers[args.id] else {
+            result(FlutterError(code: "NATIVE_ERR", message: "[Alarm] Audio player not found for ID: \(args.id)", details: nil))
             return
         }
 
         let currentTime = audioPlayer.deviceCurrentTime
-        let time = currentTime + delayInSeconds
+        let time = currentTime + args.delayInSeconds
 
-        let dateTime = Date().addingTimeInterval(delayInSeconds)
-        self.triggerTimes[id] = dateTime
+        let dateTime = Date().addingTimeInterval(args.delayInSeconds)
+        self.triggerTimes[args.id] = dateTime
 
-        if loopAudio {
+        if args.loopAudio {
             audioPlayer.numberOfLoops = -1
         }
 
         audioPlayer.prepareToPlay()
 
-        if fadeDuration > 0.0 {
+        if args.fadeDuration > 0.0 {
             audioPlayer.volume = 0.01
         }
 
@@ -164,19 +148,23 @@ public class SwiftAlarmPlugin: NSObject, FlutterPlugin {
 
         audioPlayer.play(atTime: time + 0.5)
 
-        self.tasksQueue[id] = DispatchWorkItem(block: {
+        self.tasksQueue[args.id] = DispatchWorkItem(block: {
             self.handleAlarmAfterDelay(
-                id: id,
+                id: args.id,
                 triggerTime: dateTime,
-                fadeDuration: fadeDuration,
-                vibrationsEnabled: vibrationsEnabled,
-                audioLoop: loopAudio,
-                volume: volumeFloat
+                fadeDuration: args.fadeDuration,
+                vibrationsEnabled: args.vibrationsEnabled,
+                audioLoop: args.loopAudio,
+                volume: args.volume
             )
         })
 
         DispatchQueue.main.async {
-            self.timers[id] = Timer.scheduledTimer(timeInterval: delayInSeconds, target: self, selector: #selector(self.executeTask(_:)), userInfo: id, repeats: false)
+            self.timers[args.id] = Timer.scheduledTimer(timeInterval: args.delayInSeconds,
+                                                        target: self,
+                                                        selector: #selector(self.executeTask(_:)),
+                                                        userInfo: args.id,
+                                                        repeats: false)
             SwiftAlarmPlugin.scheduleAppRefresh()
         }
 
@@ -246,7 +234,9 @@ public class SwiftAlarmPlugin: NSObject, FlutterPlugin {
     }
 
     // Méthode pour gérer l'alarme après un délai
-    private func handleAlarmAfterDelay(id: Int, triggerTime: Date, fadeDuration: Double, vibrationsEnabled: Bool, audioLoop: Bool, volume: Float?) {
+    private func handleAlarmAfterDelay(id: Int, triggerTime: Date, 
+                                       fadeDuration: Double, vibrationsEnabled: Bool,
+                                       audioLoop: Bool, volume: Double?) {
         guard let audioPlayer = self.audioPlayers[id], let storedTriggerTime = triggerTimes[id], triggerTime == storedTriggerTime else {
             return
         }
@@ -269,9 +259,8 @@ public class SwiftAlarmPlugin: NSObject, FlutterPlugin {
 
         NSLog("SwiftAlarmPlugin: fadeDuration is \(fadeDuration)s and volume is \(String(describing: volume))");
 
-        if let volumeValue = volume {
-            self.setVolume(volume: volumeValue, enable: true)
-        }
+        self.setVolume(volume: Float(volume), enable: true)
+
         if fadeDuration > 0.0 {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.0) {
                 audioPlayer.setVolume(1.0, fadeDuration: fadeDuration)
@@ -288,9 +277,7 @@ public class SwiftAlarmPlugin: NSObject, FlutterPlugin {
         self.mixOtherAudios()
 
         self.vibrate = false
-        if self.previousVolume != nil {
-            self.setVolume(volume: self.previousVolume!, enable: false)
-        }
+        self.setVolume(volume: self.previousVolume, enable: false)
 
         if let timer = timers[id] {
             timer.invalidate()
@@ -335,7 +322,8 @@ public class SwiftAlarmPlugin: NSObject, FlutterPlugin {
     }
 
     // Méthode pour définir le volume audio
-    public func setVolume(volume: Float, enable: Bool) {
+    public func setVolume(volume: Float?, enable: Bool) {
+        guard let volume else { return }
         DispatchQueue.main.async {
             let volumeView = MPVolumeView()
 

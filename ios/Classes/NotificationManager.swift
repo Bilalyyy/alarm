@@ -6,13 +6,13 @@
 //
 import UserNotifications
 
-class NotificationManager {
+final class NotificationManager {
     static let shared = NotificationManager()
     private let center = UNUserNotificationCenter.current()
 
     private init() {}
 
-    func scheduleNotification(id: String, delayInSeconds: Int, title: String, body: String) {
+    func scheduleNotification(id: Int, delayInSeconds: Double, title: String, body: String) {
         center.requestAuthorization(options: [.alert, .sound, .badge]) { granted, error in
             if granted {
                 let content = UNMutableNotificationContent()
@@ -20,7 +20,8 @@ class NotificationManager {
                 content.body = body
                 content.sound = nil
 
-                let trigger = UNTimeIntervalNotificationTrigger(timeInterval: TimeInterval(delayInSeconds), repeats: false)
+                let trigger = UNTimeIntervalNotificationTrigger(timeInterval: TimeInterval(Int(floor(delayInSeconds))),
+                                                                repeats: false)
                 let request = UNNotificationRequest(identifier: "alarm-\(id)", content: content, trigger: trigger)
 
                 center.add(request) { error in
@@ -34,7 +35,7 @@ class NotificationManager {
         }
     }
 
-    func cancelNotification(id: String) {
+    func cancelNotification(id: Int) {
         center.removePendingNotificationRequests(withIdentifiers: ["alarm-\(id)"])
     }
 
