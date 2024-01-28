@@ -68,99 +68,132 @@ public class SwiftAlarmPlugin: NSObject, FlutterPlugin {
     private func setAlarm(call: FlutterMethodCall, result: FlutterResult) {
         self.mixOtherAudios()
 
-        guard let args = call.arguments as? [String: Any], args = Args(data: args) else {
+        guard let alarmSettings = call.arguments as? [String: Any], alarmSettings = Args(data: alarmSettings) else {
             result(FlutterError(code: "NATIVE_ERR", message: "[Alarm] Arguments are not in the expected format", details: nil))
             return
         }
 
-        NotificationManager.shared.scheduleNotification(id: args.id,
-                                                        delayInSeconds: args.delayInSeconds,
-                                                        title: args.notificationTitle,
-                                                        body: args.notificationBody)
+        scheduleLocalNotification(alarmSettings)
+        addObserver(alarmSettings.notifOnKillEnabled)
 
-        notificationTitleOnKill = args.notificationTitleOnKill
-        notificationBodyOnKill = args.notificationBodyOnKill
-
-        if args.notifOnKillEnabled {
-            NotificationManager.shared.registerForAppTerminationNotification(observer: self, selector: #selector(applicationWillTerminate(_:)))
-        }
-
-        if args.assetAudio.hasPrefix("assets/") {
-            let filename = registrar.lookupKey(forAsset: args.assetAudio)
-
-            guard let audioPath = Bundle.main.path(forResource: filename, ofType: nil) else {
-                result(FlutterError(code: "NATIVE_ERR", message: "[Alarm] Audio file not found: \(args.assetAudio)", details: nil))
-                return
-            }
-
-            do {
-                let audioUrl = URL(fileURLWithPath: audioPath)
-                let audioPlayer = try AVAudioPlayer(contentsOf: audioUrl)
-                self.audioPlayers[args.id] = audioPlayer
-            } catch {
-                result(FlutterError(code: "NATIVE_ERR", message: "[Alarm] Error loading audio player: \(error.localizedDescription)", details: nil))
-                return
-            }
-        } else {
-            do {
-                let documentsDirectory = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-                let filename = String(args.assetAudio.split(separator: "/").last ?? "")
-                let assetAudioURL = documentsDirectory.appendingPathComponent(filename)
-
-                let audioPlayer = try AVAudioPlayer(contentsOf: assetAudioURL)
-                self.audioPlayers[args.id] = audioPlayer
-            } catch {
-                result(FlutterError.init(code: "NATIVE_ERR", message: "[Alarm] Error loading given local asset path: \(args.assetAudio)", details: nil))
-                return
-            }
-        }
-
-        guard let audioPlayer = self.audioPlayers[args.id] else {
-            result(FlutterError(code: "NATIVE_ERR", message: "[Alarm] Audio player not found for ID: \(args.id)", details: nil))
+        guard let audioPlayer = createAudioPlayer(for: alarmSettings) else {
+            result(FlutterError(code: "NATIVE_ERR", message: "[Alarm] Error creating audio player for ID: \(alarmSettings.id)", details: nil))
             return
         }
 
+        let alarmDate = Date().addingTimeInterval(alarmSettings.delayInSeconds)
+
+        setupPlayer(alarmSettings, at: alarmDate)
+        startSilentSound()
+
         let currentTime = audioPlayer.deviceCurrentTime
-        let time = currentTime + args.delayInSeconds
+        let alarmTime = currentTime + alarmSettings.delayInSeconds + 0.5
 
-        let dateTime = Date().addingTimeInterval(args.delayInSeconds)
-        self.triggerTimes[args.id] = dateTime
+        audioPlayer.play(atTime: alarmTime)
 
-        if args.loopAudio {
+        tasksQueue[alarmSettings.id] = createAlarmTask(for: alarmSettings,
+                                                            at: alarmDate)
+
+        alarmPlay()
+
+        DispatchQueue.main.async {
+            self.saveTimer(id: alarmSettings.id, alarmSettings.delayInSeconds)
+            SwiftAlarmPlugin.scheduleAppRefresh()
+        }
+
+        result(true)
+    }
+
+    private func setupPlayer(_ alarmSettings: Args, at alarmDate: Date) {
+
+        // Enregistre le moment où l'alarme doit se déclencher
+        triggerTimes[alarmSettings.id] = alarmDate
+
+        if alarmSettings.loopAudio {
             audioPlayer.numberOfLoops = -1
         }
 
         audioPlayer.prepareToPlay()
 
-        if args.fadeDuration > 0.0 {
+        // Réduit le volume du son de l'alarme si une durée de fondu est spécifiée
+        if alarmSettings.fadeDuration > 0.0 {
             audioPlayer.volume = 0.01
         }
+    }
 
-        self.startSilentSound()
+    private func alarmPlay() {
+        let currentTime = audioPlayer.deviceCurrentTime
+        let alarmTime = currentTime + alarmSettings.delayInSeconds + 0.5
 
-        audioPlayer.play(atTime: time + 0.5)
+        audioPlayer.play(atTime: alarmTime)
+    }
 
-        self.tasksQueue[args.id] = DispatchWorkItem(block: {
-            self.handleAlarmAfterDelay(
-                id: args.id,
-                triggerTime: dateTime,
-                fadeDuration: args.fadeDuration,
-                vibrationsEnabled: args.vibrationsEnabled,
-                audioLoop: args.loopAudio,
-                volume: args.volume
-            )
-        })
+    private func saveTimer(id: Int, _ delayInSeconds: Double) {
+        timers[id] = Timer.scheduledTimer(timeInterval: delayInSeconds,
+                                          target: self,
+                                          selector: #selector(executeTask(_:)),
+                                          userInfo: id,
+                                          repeats: false)
 
-        DispatchQueue.main.async {
-            self.timers[args.id] = Timer.scheduledTimer(timeInterval: args.delayInSeconds,
-                                                        target: self,
-                                                        selector: #selector(self.executeTask(_:)),
-                                                        userInfo: args.id,
-                                                        repeats: false)
-            SwiftAlarmPlugin.scheduleAppRefresh()
+    }
+
+
+    private func scheduleLocalNotification(_ alarmSettings: Args) {
+        NotificationManager.shared.scheduleNotification(id: alarmSettings.id,
+                                                        delayInSeconds: alarmSettings.delayInSeconds,
+                                                        title: alarmSettings.notificationTitle,
+                                                        body: alarmSettings.notificationBody)
+
+        notificationTitleOnKill = alarmSettings.notificationTitleOnKill
+        notificationBodyOnKill = alarmSettings.notificationBodyOnKill
+    }
+
+    
+    private func addObserver(_ notifOnKillEnabled: Bool) {
+        guard notifOnKillEnabled else { return }
+        NotificationManager.shared.registerForAppTerminationNotification(observer: self,
+                                                                         selector: #selector(applicationWillTerminate(_:)))
+    }
+
+    private func createAudioPlayer(for alarmSettings: AlarmSettings) -> AVAudioPlayer? {
+        // Vérifie si le son de l'alarme est un fichier local ou un fichier dans le bundle de l'application
+        let audioPath: String
+        if alarmSettings.assetAudio.hasPrefix("assets/") {
+            let filename = registrar.lookupKey(forAsset: alarmSettings.assetAudio)
+            guard let path = Bundle.main.path(forResource: filename, ofType: nil) else {
+                return nil
+            }
+            audioPath = path
+        } else {
+            let documentsDirectory = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            let filename = String(alarmSettings.assetAudio.split(separator: "/").last ?? "")
+            audioPath = documentsDirectory.appendingPathComponent(filename).path
         }
 
-        result(true)
+        // Crée un lecteur audio à partir du chemin du fichier
+        do {
+            let audioUrl = URL(fileURLWithPath: audioPath)
+            let audioPlayer = try AVAudioPlayer(contentsOf: audioUrl)
+            // sauvegarde le player
+            audioPlayers[alarmSettings.id] = audioPlayer
+            return audioPlayer
+        } catch {
+            return nil
+        }
+    }
+
+    private func createAlarmTask(for alarmSettings: Args,at alarmDate: Date) -> DispatchWorkItem {
+        // Crée un bloc de code à exécuter après le délai
+        return DispatchWorkItem(block: {
+            self.handleAlarmAfterDelay(
+                id: alarmSettings.id,
+                triggerTime: alarmDate,
+                fadeDuration: alarmSettings.fadeDuration,
+                vibrationsEnabled: alarmSettings.vibrationsEnabled,
+                audioLoop: alarmSettings.loopAudio,
+                volume: alarmSettings.volume
+            )
+        })
     }
 
     // Méthode de traitement lors de l'exécution d'une tâche planifiée
