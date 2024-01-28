@@ -33,12 +33,10 @@ public class SwiftAlarmPlugin: NSObject, FlutterPlugin {
     private var triggerTimes: [Int: Date] = [:]
 
     // Variables pour les paramètres de notification lors de la fermeture de l'application
-    private var notifOnKillEnabled: Bool!
     private var notificationTitleOnKill: String!
     private var notificationBodyOnKill: String!
 
     // Variables pour suivre l'état de l'application
-    private var observerAdded = false
     private var vibrate = false
     private var playSilent = false
     private var previousVolume: Float? = nil
@@ -75,19 +73,15 @@ public class SwiftAlarmPlugin: NSObject, FlutterPlugin {
             return
         }
 
-        if let notificationTitle = args.notificationTitle && let notificationBody = args.notificationBody && args.delayInSeconds >= 1.0 {
-            NotificationManager.shared.scheduleNotification(id: args.id,
-                                                            delayInSeconds: args.delayInSeconds,
-                                                            title: notificationTitle,
-                                                            body: notificationBody)
-        }
+        NotificationManager.shared.scheduleNotification(id: args.id,
+                                                        delayInSeconds: args.delayInSeconds,
+                                                        title: args.notificationTitle,
+                                                        body: args.notificationBody)
 
-        notifOnKillEnabled = args.notifOnKillEnabled
         notificationTitleOnKill = args.notificationTitleOnKill
         notificationBodyOnKill = args.notificationBodyOnKill
 
-        if notifOnKillEnabled && !observerAdded {
-            observerAdded = true
+        if args.notifOnKillEnabled {
             NotificationManager.shared.registerForAppTerminationNotification(observer: self, selector: #selector(applicationWillTerminate(_:)))
         }
 
@@ -142,9 +136,7 @@ public class SwiftAlarmPlugin: NSObject, FlutterPlugin {
             audioPlayer.volume = 0.01
         }
 
-        if !playSilent {
-            self.startSilentSound()
-        }
+        self.startSilentSound()
 
         audioPlayer.play(atTime: time + 0.5)
 
@@ -179,7 +171,8 @@ public class SwiftAlarmPlugin: NSObject, FlutterPlugin {
     }
 
     // Méthode pour démarrer la lecture d'un son silencieux
-    private func startSilentSound() {
+    private func startSilentSound(_ playSilent: Bool) {
+        guard !playSilent else { return }
         let filename = registrar.lookupKey(forAsset: "assets/long_blank.mp3", fromPackage: "alarm")
         if let audioPath = Bundle.main.path(forResource: filename, ofType: nil) {
             let audioUrl = URL(fileURLWithPath: audioPath)
@@ -378,9 +371,8 @@ public class SwiftAlarmPlugin: NSObject, FlutterPlugin {
 
     // Méthode pour arrêter le service de notification à la fermeture de l'application
     private func stopNotificationOnKillService() {
-        if audioPlayers.isEmpty && observerAdded {
+        if audioPlayers.isEmpty {
             NotificationManager.shared.removeAppTerminationNotificationObserver(observer: self)
-            observerAdded = false
         }
     }
 

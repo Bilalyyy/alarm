@@ -8,11 +8,16 @@ import UserNotifications
 
 final class NotificationManager {
     static let shared = NotificationManager()
+
+    var observerAdded = false
+
     private let center = UNUserNotificationCenter.current()
 
     private init() {}
 
-    func scheduleNotification(id: Int, delayInSeconds: Double, title: String, body: String) {
+    func scheduleNotification(id: Int, delayInSeconds: Double, title: String?, body: String?) {
+        guard let title && let body && delayInSeconds >= 1.0  else { return }
+
         center.requestAuthorization(options: [.alert, .sound, .badge]) { granted, error in
             if granted {
                 let content = UNMutableNotificationContent()
@@ -32,7 +37,6 @@ final class NotificationManager {
             } else {
                 NSLog("NotificationManager: Notification permission denied")
             }
-        }
     }
 
     func cancelNotification(id: Int) {
