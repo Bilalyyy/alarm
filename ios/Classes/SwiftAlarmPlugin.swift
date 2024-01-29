@@ -69,19 +69,13 @@ public class SwiftAlarmPlugin: NSObject, FlutterPlugin {
         }
     }
 
-    // Méthode pour définir le volume audio
-    public func setVolume(volume: Float?, enable: Bool) {
+    // Method to set audio volume
+    public func setVolume(volume: Float?, enable: Bool) async {
         guard let volume else { return }
-        DispatchQueue.main.async {
-            let volumeView = MPVolumeView()
-
-            DispatchQueue.main.asyncAfter(deadline: DispatchTime.now() + 0.1) {
-                if let slider = volumeView.subviews.first(where: { $0 is UISlider }) as? UISlider {
-                    self.previousVolume = enable ? slider.value : nil
-                    slider.value = volume
-                }
-                volumeView.removeFromSuperview()
-            }
+        do {
+            self.previousVolume = enable ? try await MPVolumeView.setVolume(volume) : nil
+        } catch {
+            NSLog("SwiftAlarmPlugin: The volume cannot be adjusted: \(error)")
         }
     }
 
