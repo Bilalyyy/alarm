@@ -61,10 +61,14 @@ final class NotificationManager {
     }
 
     func registerForAppTerminationNotification(observer: AnyObject, selector: Selector) { // used 201 && 93
+        guard !observerAdded else { return }
+        observerAdded = true
         NotificationCenter.default.addObserver(observer, selector: selector, name: UIApplication.willTerminateNotification, object: nil)
     }
 
     func removeAppTerminationNotificationObserver(observer: AnyObject) { //use 316 && 385
+        guard observerAdded else { return }
+        observerAdded = false
         NotificationCenter.default.removeObserver(observer, name: UIApplication.willTerminateNotification, object: nil)
     }
 }
