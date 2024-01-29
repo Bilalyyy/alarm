@@ -41,10 +41,8 @@ public class SwiftAlarmPlugin: NSObject, FlutterPlugin {
 
     // Méthode de traitement des appels de méthodes Flutter
     public func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
-        guard let alarmSettings = call.arguments as? [String: Any], alarmSettings = Args(data: alarmSettings) else {
-            result(FlutterError(code: "NATIVE_ERR", 
-                                message: "[Alarm] Arguments are not in the expected format",
-                                details: nil))
+        guard let alarmSettings = fetchSettings(call) else {
+            result(FlutterError(code: "NATIVE_ERR", message: "[Alarm] Arguments are not in the expected format", details: nil))
             return
         }
 
@@ -84,6 +82,14 @@ public class SwiftAlarmPlugin: NSObject, FlutterPlugin {
     }
 
     //MARK: - Private function
+
+    //Méthode pour creer un objet Args
+    private func fetchSettings(_ call: FlutterMethodCall) -> Args? {
+        guard let alarmSettings = call.arguments as? [String: Any], alarmSettings = Args(data: alarmSettings) else {
+            return nil
+        }
+        return alarmSettings
+    }
 
     // Méthode pour configurer et programmer une alarme
     private func setAlarm(_ alarmSettings: Args, result: FlutterResult) {
