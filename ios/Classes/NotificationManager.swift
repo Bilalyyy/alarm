@@ -37,6 +37,23 @@ final class NotificationManager {
             } else {
                 NSLog("NotificationManager: Notification permission denied")
             }
+        }
+    }
+
+    func notificationOnAppKill(_ title: String, _ body: String) {
+        let content = UNMutableNotificationContent()
+        content.title = title
+        content.body = body
+        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 2, repeats: false)
+        let request = UNNotificationRequest(identifier: "notification on app kill", content: content, trigger: trigger)
+
+        UNUserNotificationCenter.current().add(request) { (error) in
+            if let error = error {
+                NSLog("SwiftAlarmPlugin: Failed to show notification on kill service => error: \(error.localizedDescription)")
+            } else {
+                NSLog("SwiftAlarmPlugin: Trigger notification on app kill")
+            }
+        }
     }
 
     func cancelNotification(id: Int) {

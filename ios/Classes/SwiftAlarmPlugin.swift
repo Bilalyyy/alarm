@@ -465,19 +465,8 @@ public class SwiftAlarmPlugin: NSObject, FlutterPlugin {
 
     // Méthode pour gérer les notifications à la fermeture de l'application
     @objc func applicationWillTerminate(_ notification: Notification) {
-        let content = UNMutableNotificationContent()
-        content.title = notificationTitleOnKill
-        content.body = notificationBodyOnKill
-        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 2, repeats: false)
-        let request = UNNotificationRequest(identifier: "notification on app kill", content: content, trigger: trigger)
-
-        UNUserNotificationCenter.current().add(request) { (error) in
-            if let error = error {
-                NSLog("SwiftAlarmPlugin: Failed to show notification on kill service => error: \(error.localizedDescription)")
-            } else {
-                NSLog("SwiftAlarmPlugin: Trigger notification on app kill")
-            }
-        }
+        NotificationManager.shared.notificationOnAppKill(notificationTitleOnKill,
+                                                  notificationBodyOnKill)
     }
 
     // Méthode pour gérer les interruptions audio
