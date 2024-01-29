@@ -21,8 +21,8 @@ final class NotificationManager {
         center.requestAuthorization(options: [.alert, .sound, .badge]) { granted, error in
             if granted {
                 let content = UNMutableNotificationContent()
-                content.title = title
-                content.body = body
+                content.title = title ?? "Alarm"
+                content.body = body ?? "Wake up!"
                 content.sound = nil
 
                 let trigger = UNTimeIntervalNotificationTrigger(timeInterval: TimeInterval(Int(floor(delayInSeconds))),
