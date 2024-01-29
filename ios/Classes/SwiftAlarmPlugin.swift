@@ -237,7 +237,7 @@ public class SwiftAlarmPlugin: NSObject, FlutterPlugin {
 
     // Méthode pour répéter la lecture d'un son silencieux
     private func loopSilentSound() {
-        self.silentAudioPlayer?.play()
+        silentAudioPlayer?.play()
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
             self.silentAudioPlayer?.pause()
             DispatchQueue.main.asyncAfter(deadline: .now() + 5.0) {
@@ -252,29 +252,29 @@ public class SwiftAlarmPlugin: NSObject, FlutterPlugin {
     private func handleAlarmAfterDelay(id: Int, triggerTime: Date, 
                                        fadeDuration: Double, vibrationsEnabled: Bool,
                                        audioLoop: Bool, volume: Double?) {
-        guard let audioPlayer = self.audioPlayers[id], let storedTriggerTime = triggerTimes[id], triggerTime == storedTriggerTime else {
+        guard let audioPlayer = audioPlayers[id], let storedTriggerTime = triggerTimes[id], triggerTime == storedTriggerTime else {
             return
         }
 
-        self.duckOtherAudios()
+        duckOtherAudios()
 
         if !audioPlayer.isPlaying || audioPlayer.currentTime == 0.0 {
-            self.audioPlayers[id]!.play()
+            audioPlayers[id]!.play()
         }
 
-        self.vibrate = vibrationsEnabled
-        self.triggerVibrations()
+        vibrate = vibrationsEnabled
+        triggerVibrations()
 
         if !audioLoop {
             let audioDuration = audioPlayer.duration
             DispatchQueue.main.asyncAfter(deadline: .now() + audioDuration) {
-                self.stopAlarm(id: id, cancelNotif: false, result: { _ in })
+                self.stopAlarm(id, cancelNotif: false, result: { _ in })
             }
         }
 
         NSLog("SwiftAlarmPlugin: fadeDuration is \(fadeDuration)s and volume is \(String(describing: volume))");
 
-        self.setVolume(volume: Float(volume), enable: true)
+        setVolume(volume: Float(volume), enable: true)
 
         if fadeDuration > 0.0 {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.0) {
@@ -289,37 +289,36 @@ public class SwiftAlarmPlugin: NSObject, FlutterPlugin {
             NotificationManager.shared.cancelNotification(id: String(id))
         }
 
-        self.mixOtherAudios()
+        mixOtherAudios()
 
-        self.vibrate = false
-        self.setVolume(volume: self.previousVolume, enable: false)
+        vibrate = false
+        setVolume(volume: previousVolume, enable: false)
 
         if let timer = timers[id] {
             timer.invalidate()
             timers.removeValue(forKey: id)
         }
 
-        if let audioPlayer = self.audioPlayers[id] {
-            audioPlayer.stop()
-            self.audioPlayers.removeValue(forKey: id)
-            self.triggerTimes.removeValue(forKey: id)
-            self.tasksQueue[id]?.cancel()
-            self.tasksQueue.removeValue(forKey: id)
-            self.stopSilentSound()
-            self.stopNotificationOnKillService()
-            result(true)
-        } else {
+        guard let audioPlayer = audioPlayers[id] else {
             result(false)
-        }
+            return }
+        audioPlayer.stop()
+        audioPlayers.removeValue(forKey: id)
+        triggerTimes.removeValue(forKey: id)
+        tasksQueue[id]?.cancel()
+        tasksQueue.removeValue(forKey: id)
+        stopSilentSound()
+        stopNotificationOnKillService()
+        result(true)
     }
 
     // Méthode pour arrêter la lecture du son silencieux
     private func stopSilentSound() {
-        self.mixOtherAudios()
+        mixOtherAudios()
 
-        if self.audioPlayers.isEmpty {
-            self.playSilent = false
-            self.silentAudioPlayer?.stop()
+        if audioPlayers.isEmpty {
+            playSilent = false
+            silentAudioPlayer?.stop()
             NotificationManager.shared.removeAppTerminationNotificationObserver(observer: self)
             SwiftAlarmPlugin.cancelBackgroundTasks()
         }
@@ -338,7 +337,7 @@ public class SwiftAlarmPlugin: NSObject, FlutterPlugin {
 
     // Méthode pour obtenir le temps de lecture actuel d'un lecteur audio
     private func audioCurrentTime(id: Int, result: FlutterResult) {
-        if let audioPlayer = self.audioPlayers[id] {
+        if let audioPlayer = audioPlayers[id] {
             let time = Double(audioPlayer.currentTime)
             result(time)
         } else {
@@ -348,23 +347,23 @@ public class SwiftAlarmPlugin: NSObject, FlutterPlugin {
 
     // Méthode pour effectuer des tâches en arrière-plan
     private func backgroundFetch() {
-        self.mixOtherAudios()
+        mixOtherAudios()
 
-        self.silentAudioPlayer?.pause()
-        self.silentAudioPlayer?.play()
+        silentAudioPlayer?.pause()
+        silentAudioPlayer?.play()
 
-        let ids = Array(self.audioPlayers.keys)
+        let ids = Array(audioPlayers.keys)
 
         for id in ids {
             NSLog("SwiftAlarmPlugin: Background check alarm with id \(id)")
-            if let audioPlayer = self.audioPlayers[id] {
-                let dateTime = self.triggerTimes[id]!
+            if let audioPlayer = audioPlayers[id] {
+                let dateTime = triggerTimes[id]!
                 let currentTime = audioPlayer.deviceCurrentTime
                 let time = currentTime + dateTime.timeIntervalSinceNow
-                self.audioPlayers[id]!.play(atTime: time)
+                audioPlayers[id]!.play(atTime: time)
             }
 
-            let delayInSeconds = self.triggerTimes[id]!.timeIntervalSinceNow
+            let delayInSeconds = triggerTimes[id]!.timeIntervalSinceNow
             DispatchQueue.main.async {
                 self.timers[id] = Timer.scheduledTimer(timeInterval: delayInSeconds,
                                                        target: self,
@@ -479,10 +478,10 @@ public class SwiftAlarmPlugin: NSObject, FlutterPlugin {
 
         switch type {
         case .began:
-            self.silentAudioPlayer?.play()
+            silentAudioPlayer?.play()
             NSLog("SwiftAlarmPlugin: Interruption began")
         case .ended:
-            self.silentAudioPlayer?.play()
+            silentAudioPlayer?.play()
             NSLog("SwiftAlarmPlugin: Interruption ended")
         default:
             break
