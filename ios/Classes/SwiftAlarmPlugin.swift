@@ -29,8 +29,8 @@ public class SwiftAlarmPlugin: NSObject, FlutterPlugin {
     private var triggerTimes: [Int: Date] = [:]
 
     // Variables pour les paramètres de notification lors de la fermeture de l'application
-    private var notificationTitleOnKill: String!
-    private var notificationBodyOnKill: String!
+    private var notificationTitleOnKill: String = ""
+    private var notificationBodyOnKill: String = ""
 
     // Variables pour suivre l'état de l'application
     private var vibrate = false
@@ -41,20 +41,25 @@ public class SwiftAlarmPlugin: NSObject, FlutterPlugin {
 
     // Méthode de traitement des appels de méthodes Flutter
     public func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
+        guard let alarmSettings = call.arguments as? [String: Any], alarmSettings = Args(data: alarmSettings) else {
+            result(FlutterError(code: "NATIVE_ERR", 
+                                message: "[Alarm] Arguments are not in the expected format",
+                                details: nil))
+            return
+        }
+
         DispatchQueue.global(qos: .default).async {
-            if call.method == "setAlarm" {
-                self.setAlarm(call: call, result: result)
-            } else if call.method == "stopAlarm" {
-                if let args = call.arguments as? [String: Any], let id = args["id"] as? Int {
-                    self.stopAlarm(id: id, cancelNotif: true, result: result)
-                } else {
-                    result(FlutterError.init(code: "NATIVE_ERR", message: "[Alarm] Error: id parameter is missing or invalid", details: nil))
-                }
-            } else if call.method == "audioCurrentTime" {
-                let args = call.arguments as! Dictionary<String, Any>
-                let id = args["id"] as! Int
-                self.audioCurrentTime(id: id, result: result)
-            } else {
+            switch call.method {
+            case "setAlarm":
+                self.setAlarm(alarmSettings, result: result)
+
+            case "stopAlarm":
+                self.stopAlarm(alarmSettings.id, cancelNotif: true, result: result)
+
+            case "audioCurrentTime":
+                self.audioCurrentTime(alarmSettings.id, result: result)
+
+            default:
                 DispatchQueue.main.sync {
                     result(FlutterMethodNotImplemented)
                 }
@@ -81,13 +86,8 @@ public class SwiftAlarmPlugin: NSObject, FlutterPlugin {
     //MARK: - Private function
 
     // Méthode pour configurer et programmer une alarme
-    private func setAlarm(call: FlutterMethodCall, result: FlutterResult) {
-        self.mixOtherAudios()
-
-        guard let alarmSettings = call.arguments as? [String: Any], alarmSettings = Args(data: alarmSettings) else {
-            result(FlutterError(code: "NATIVE_ERR", message: "[Alarm] Arguments are not in the expected format", details: nil))
-            return
-        }
+    private func setAlarm(_ alarmSettings: Args, result: FlutterResult) {
+        mixOtherAudios()
 
         scheduleLocalNotification(alarmSettings)
         addObserver(alarmSettings.notifOnKillEnabled)
@@ -284,7 +284,7 @@ public class SwiftAlarmPlugin: NSObject, FlutterPlugin {
     }
 
     // Méthode pour arrêter une alarme
-    private func stopAlarm(id: Int, cancelNotif: Bool, result: FlutterResult) {
+    private func stopAlarm(_ id: Int, cancelNotif: Bool, result: FlutterResult) {
         if cancelNotif {
             NotificationManager.shared.cancelNotification(id: String(id))
         }
@@ -336,7 +336,7 @@ public class SwiftAlarmPlugin: NSObject, FlutterPlugin {
     }
 
     // Méthode pour obtenir le temps de lecture actuel d'un lecteur audio
-    private func audioCurrentTime(id: Int, result: FlutterResult) {
+    private func audioCurrentTime(_ id: Int, result: FlutterResult) {
         if let audioPlayer = audioPlayers[id] {
             let time = Double(audioPlayer.currentTime)
             result(time)
