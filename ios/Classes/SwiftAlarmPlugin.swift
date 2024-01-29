@@ -37,6 +37,10 @@ public class SwiftAlarmPlugin: NSObject, FlutterPlugin {
     private var playSilent = false
     private var previousVolume: Float? = nil
 
+    //MARK: Init
+
+    private init() { }
+
     //MARK: - Public unction
 
     // Méthode de traitement des appels de méthodes Flutter
@@ -159,7 +163,6 @@ public class SwiftAlarmPlugin: NSObject, FlutterPlugin {
 
     }
 
-
     private func scheduleLocalNotification(_ alarmSettings: Args) {
         NotificationManager.shared.scheduleNotification(id: alarmSettings.id,
                                                         delayInSeconds: alarmSettings.delayInSeconds,
@@ -170,7 +173,6 @@ public class SwiftAlarmPlugin: NSObject, FlutterPlugin {
         notificationBodyOnKill = alarmSettings.notificationBodyOnKill
     }
 
-    
     private func addObserver(_ notifOnKillEnabled: Bool) {
         guard notifOnKillEnabled else { return }
         NotificationManager.shared.registerForAppTerminationNotification(observer: self,
